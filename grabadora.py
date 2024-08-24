@@ -10,6 +10,23 @@ import pyaudio
 from pydub import AudioSegment
 from pynput import keyboard
 
+import GrabadoraGUIFrame
+
+
+class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
+    def __init__(self, parent):
+        GrabadoraGUIFrame.GrabadoraGUIFrame.__init__(self, parent)
+
+    # def FindSquare(self, event):
+    #    num = int(self.m_textCtrl1.GetValue())
+    #    self.m_textCtrl2.SetValue(str(num * num))
+
+app = wx.App(False)
+frame = GUI(None)
+frame.Show(True)
+#start the applications
+app.MainLoop()
+
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 44100
