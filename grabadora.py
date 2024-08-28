@@ -1,32 +1,17 @@
 import time
-import sys
 import wave
 import datetime
 import os
-import threading
 import wx
 
 import pyaudio
 from pydub import AudioSegment
-from pynput import keyboard
+# from pynput import keyboard
+import numpy as np
 
 import GrabadoraGUIFrame
 
-
-class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
-    def __init__(self, parent):
-        GrabadoraGUIFrame.GrabadoraGUIFrame.__init__(self, parent)
-
-    # def FindSquare(self, event):
-    #    num = int(self.m_textCtrl1.GetValue())
-    #    self.m_textCtrl2.SetValue(str(num * num))
-
-app = wx.App(False)
-frame = GUI(None)
-frame.Show(True)
-#start the applications
-app.MainLoop()
-
+# pyaudio constants
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 44100
@@ -34,136 +19,226 @@ RATE = 44100
 # Initialize volume factor (initially 1.0 for no adjustment)
 volume_factor = 1.0
 
-def callback(in_data, frame_count, time_info, status):
-    # Adjust volume (multiply by 0.5 for 50% reduction)
-    adjusted_data = bytearray(int(sample * volume_factor) for sample in in_data)
-
-
-    # Process audio data for recording (e.g., write to a buffer)
-    #output_wavefile.writeframes(in_data)  # Write data to the WAV file
-    output_wavefile.writeframes(adjusted_data)  # Write data to the WAV file
-    return in_data, pyaudio.paContinue
-
-p = pyaudio.PyAudio()
-stream = p.open(format=p.get_format_from_width(2),
-                channels=CHANNELS,
-                rate=44100,
-                input=True,
-                output=True,
-                stream_callback=callback)
-                
 # Create a WAV file with a unique filename based on date and time
 now = datetime.datetime.now()
-
-# Combine all arguments (if any) into a single string
-arguments = "_".join(sys.argv[1:])  
-
-
-output_filename = f"audio{'__' if arguments else ''}{arguments}__{now.strftime('%d-%m-%Y__%H-%M-%S')}.wav"
-output_wavefile = wave.open(output_filename, 'wb')
-output_wavefile.setnchannels(CHANNELS)
-output_wavefile.setsampwidth(p.get_sample_size(FORMAT))
-output_wavefile.setframerate(RATE)
-
-# create a separate thread to capture user's volume input
-volume_change_timer = None
-volume_change_amount = 0
-
-def start_volume_change(amount):
-    global volume_change_timer, volume_change_amount
-    volume_change_amount = amount
-    volume_change_timer = threading.Timer(0.2, adjust_volume)
-    volume_change_timer.start()
-
-def adjust_volume():
-    global volume_factor, volume_change_amount, volume_change_timer
-    volume_factor = min(max(volume_factor + volume_change_amount, 0.1), 1.0)
-    volume_change_amount = 0
-    volume_change_timer = None
-
-
-def on_press(key):
-    global volume_change_timer
-    try:
-        k = key.char  # single-char keys
-    except:
-        k = key  # for special keys like ctrl, alt, etc.
-    if k == '+':
-        start_volume_change(0.1)
-    elif k == '-':
-        start_volume_change(-0.1)
-
-def on_release(key):
-    global volume_change_timer
-    if volume_change_timer:
-        volume_change_timer.cancel()
-        volume_change_timer = None
-
-def input_thread():
-    with keyboard.Listener(on_press=on_press) as listener:
-        listener.join()
-
-
-# Start the input thread
-input_thread = threading.Thread(target=input_thread)
-input_thread.daemon = True
-input_thread.start()
 formatted_time = ''
 
+# Define a new event type
+myEVT_CUSTOM = wx.NewEventType()
+EVT_MY_CUSTOM = wx.PyEventBinder(myEVT_CUSTOM, 1)
+
+class MyCustomEvent(wx.PyCommandEvent):
+    def __init__(self, evtType=myEVT_CUSTOM, id=wx.ID_ANY, data=None):
+        super().__init__(evtType, id)
+        self.data = data
+
+    def GetData(self):
+        return self.data
+
+class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
+    def __init__(self, parent):
+        GrabadoraGUIFrame.GrabadoraGUIFrame.__init__(self, parent)
+
+        self.audioCallback = MyAudioCallback(self)
+        self.pya = None
+        self.stream = None
+        self.output_wavefile = None
+        self.resume_after_pause = False
+        self.start_time = None
+        self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
+        self.m_textCtrlFilename.SetValue(self.output_filename)
+
+        # Bind the run_loop method to handle custom events
+        self.Bind(EVT_MY_CUSTOM, self.run_loop)
+
+    def onAudioNameUpdate(self, event):
+        self.output_filename = self.m_textCtrlFilename.GetValue()
+        event.Skip()
+
+    def onStartRec(self, event):
+        if not self.resume_after_pause:
+            # lock the filename
+            self.m_textCtrlFilename.SetEditable(False)
+
+            self.pya = pyaudio.PyAudio()
+            self.stream = self.pya.open(format=self.pya.get_format_from_width(2),
+                            channels=CHANNELS,
+                            rate=44100,
+                            input=True,
+                            output=True,
+                            stream_callback=self.audioCallback.audio_processing_callback)
+
+            self.output_wavefile = wave.open(frame.output_filename, 'wb')
+            self.output_wavefile.setnchannels(CHANNELS)
+            self.output_wavefile.setsampwidth(self.pya.get_sample_size(FORMAT))
+            self.output_wavefile.setframerate(RATE)
+
+            # Record the start time
+            self.start_time = time.time()
+
+        evt = MyCustomEvent(data="start")
+        wx.PostEvent(self, evt)
+        event.Skip()
+
+    def onPauseRec(self, event):
+        evt = MyCustomEvent(data="pause")
+        wx.PostEvent(self, evt)
+        event.Skip()
+
+    def onStopRec(self, event):
+        evt = MyCustomEvent(data="stop")
+        wx.PostEvent(self, evt)
+        event.Skip()
+
+    def onVolumeUpdate(self, event):
+        event.Skip()
+
+    def onFrameExit(self, event):
+        event.Skip()
+
+    def run_loop(self, event):
+
+        while self.stream is None:
+            time.sleep(0.1)
+            wx.Yield()
+
+        while self.stream.is_active():
+            # Check for custom events
+            wx.PostEvent(self, MyCustomEvent(data='dummy'))
+            elapsed_time = time.time() - self.start_time
+
+            # Convert elapsed time to hours, minutes, and seconds
+            hours, remainder = divmod(elapsed_time, 3600)
+            minutes, seconds = divmod(remainder, 60)
+
+            # Format the time as HH:MM:SS
+            formatted_time = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+
+            #print(f"\r* Tiempo de grabacion: {formatted_time} (Volumen: {volume_factor:.2f})", end="", flush=True)
+
+            time.sleep(0.1)
+
+            # Record the end time
+            end = time.time()
 
 
-try:
-    # Record the start time
-    start = time.time()
-    print('* Grabando. Teclear <ctrl>+C para finalizar')
-    print(' - Presione "+" para subir el volumen o "-" para bajarlo')
-    
-    while stream.is_active():
-        elapsed_time = time.time() - start
-        
-        # Convert elapsed time to hours, minutes, and seconds
-        hours, remainder = divmod(elapsed_time, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        
-        # Format the time as HH:MM:SS
-        formatted_time = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+            # Check if the run condition is still met
+            if event.GetData() == "pause":
+                self.stream.pause_stream()
+            if event.GetData() == "stop":
+                self.stream.stop_stream()
+                self.stream.close()
+                self.pya.terminate()
+                self.output_wavefile.close()
 
-        print(f"\r* Tiempo de grabacion: {formatted_time} (Volumen: {volume_factor:.2f})", end="", flush=True)
-        
-        time.sleep(0.1)
-except KeyboardInterrupt:
-    print()
-    print("* Grabacion finalizada por el usuario.")
-except Exception as e:  # Catch any other exceptions
-    print(f"* Ocurrio un error inesperado: {e}")
-    
-# Record the end time
-end = time.time()
+                # Read the WAV file
+                sound = AudioSegment.from_wav(frame.output_filename)
 
-print()  # Print a newline to avoid overwriting the last line
-print(f"* Tiempo total de grabacion: {formatted_time}")
+                # Split the filename at the last dot (.) to get the base name and extension
+                base, extension = frame.output_filename.rsplit('.', 1)
+                mp3_filename = f"{base}.mp3"
 
-print('* Grabacion concluida, cerrando archivos...')
-stream.close()
-p.terminate()
-output_wavefile.close()
+                # Export the sound as MP3
+                sound.export(mp3_filename, format="mp3")
+                os.remove(frame.output_filename)
 
-# Read the WAV file
-sound = AudioSegment.from_wav(output_filename)
+            # Yield to other threads
+            wx.Yield()
 
-# Split the filename at the last dot (.) to get the base name and extension
-base, extension = output_filename.rsplit('.', 1)
-mp3_filename = f"{base}.mp3"
+# class crafted around audio_processing_callback with only purpose to pass self as argument
+class MyAudioCallback(wx.EvtHandler):
+    def __init__(self, instance):
+        super().__init__()
+        self.instance = instance  # Store the instance reference
 
-# Export the sound as MP3
-sound.export(mp3_filename, format="mp3")
-print(f'* Grabacion guardada en el archivo: {mp3_filename}')
+    def audio_processing_callback(self, in_data, frame_count, time_info, status):
+        # Convert audio data to NumPy array
+        audio_data = np.frombuffer(in_data, dtype=np.int16)
 
-# Delete the original WAV file (use with caution)
-try:
-    os.remove(output_filename)
-except FileNotFoundError:
-    print(f"* Archivo WAV {output_filename} no se encontro. Nada sera borrado.")
+        # Calculate the peak level (maximum absolute value)
+        peak_level = np.max(np.abs(audio_data))
 
-# Wait for user input before closing
-# input("* Oprima cualquier tecla para finalizar...")
+        # Calculate peak level in decibels (dB)
+        peak_level_db = 20 * np.log10(peak_level / np.iinfo(np.int16).max)
+
+        # Adjust volume (multiply by 0.5 for 50% reduction)
+        adjusted_data = bytearray(int(sample * volume_factor) for sample in in_data)
+
+        # Process audio data for recording (e.g., write to a buffer)
+        #output_wavefile.writeframes(in_data)  # Write data to the WAV file
+        while self.instance.output_wavefile is None:
+            time.sleep(1)
+
+        self.instance.output_wavefile.writeframes(adjusted_data)  # Write data to the WAV file
+        return in_data, pyaudio.paContinue
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = GUI(None)
+    # Create a dummy event to trigger the run_loop method
+    wx.PostEvent(frame, MyCustomEvent(data="dummy"))
+    #start the applications
+    app.MainLoop()
+
+
+
+
+
+
+
+# print(f"* Tiempo total de grabacion: {formatted_time}")
+#
+# print(f'* Grabacion guardada en el archivo: {mp3_filename}')
+#
+# # Delete the original WAV file (use with caution)
+# try:
+#     os.remove(frame.output_filename)
+# except FileNotFoundError:
+#     print(f"* Archivo WAV {frame.output_filename} no se encontro. Nada sera borrado.")
+
+##################################
+########### Volume stuff
+# create a separate thread to capture user's volume input
+# volume_change_timer = None
+# volume_change_amount = 0
+#
+# def start_volume_change(amount):
+#     global volume_change_timer, volume_change_amount
+#     volume_change_amount = amount
+#     volume_change_timer = threading.Timer(0.2, adjust_volume)
+#     volume_change_timer.start()
+#
+# def adjust_volume():
+#     global volume_factor, volume_change_amount, volume_change_timer
+#     volume_factor = min(max(volume_factor + volume_change_amount, 0.1), 1.0)
+#     volume_change_amount = 0
+#     volume_change_timer = None
+#
+#
+# def on_press(key):
+#     global volume_change_timer
+#     try:
+#         k = key.char  # single-char keys
+#     except:
+#         k = key  # for special keys like ctrl, alt, etc.
+#     if k == '+':
+#         start_volume_change(0.1)
+#     elif k == '-':
+#         start_volume_change(-0.1)
+#
+# def on_release(key):
+#     global volume_change_timer
+#     if volume_change_timer:
+#         volume_change_timer.cancel()
+#         volume_change_timer = None
+#
+# def input_thread():
+#     with keyboard.Listener(on_press=on_press) as listener:
+#         listener.join()
+#
+#
+# # Start the input thread
+# input_thread = threading.Thread(target=input_thread)
+# input_thread.daemon = True
+# input_thread.start()
+
