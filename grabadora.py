@@ -23,17 +23,6 @@ volume_factor = 1.0
 now = datetime.datetime.now()
 formatted_time = ''
 
-# Define a new event type
-myEVT_CUSTOM = wx.NewEventType()
-EVT_MY_CUSTOM = wx.PyEventBinder(myEVT_CUSTOM, 1)
-
-class MyCustomEvent(wx.PyCommandEvent):
-    def __init__(self, evtType=myEVT_CUSTOM, id=wx.ID_ANY, data=None):
-        super().__init__(evtType, id)
-        self.data = data
-
-    def GetData(self):
-        return self.data
 
 class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
     def __init__(self, parent):
@@ -48,8 +37,6 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
         self.m_textCtrlFilename.SetValue(self.output_filename)
 
-        # Bind the run_loop method to handle custom events
-        self.Bind(EVT_MY_CUSTOM, self.run_loop)
 
     def onAudioNameUpdate(self, event):
         self.output_filename = self.m_textCtrlFilename.GetValue()
@@ -76,35 +63,40 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
             # Record the start time
             self.start_time = time.time()
 
-        evt = MyCustomEvent(data="start")
-        wx.PostEvent(self, evt)
         event.Skip()
 
     def onPauseRec(self, event):
-        evt = MyCustomEvent(data="pause")
-        wx.PostEvent(self, evt)
+        self.stream.pause_stream()
         event.Skip()
 
     def onStopRec(self, event):
-        evt = MyCustomEvent(data="stop")
-        wx.PostEvent(self, evt)
+        self.stream.stop_stream()
+        self.stream.close()
+        self.pya.terminate()
+        self.output_wavefile.close()
+
+        # Read the WAV file
+        sound = AudioSegment.from_wav(frame.output_filename)
+
+        # Split the filename at the last dot (.) to get the base name and extension
+        base, extension = frame.output_filename.rsplit('.', 1)
+        mp3_filename = f"{base}.mp3"
+
+        # Export the sound as MP3
+        sound.export(mp3_filename, format="mp3")
+        os.remove(frame.output_filename)
+
         event.Skip()
 
     def onVolumeUpdate(self, event):
         event.Skip()
 
     def onFrameExit(self, event):
-        event.Skip()
+        wx.Exit()  # This will close the entire application
 
     def run_loop(self, event):
 
-        while self.stream is None:
-            time.sleep(0.1)
-            wx.Yield()
-
         while self.stream.is_active():
-            # Check for custom events
-            wx.PostEvent(self, MyCustomEvent(data='dummy'))
             elapsed_time = time.time() - self.start_time
 
             # Convert elapsed time to hours, minutes, and seconds
@@ -120,27 +112,6 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
 
             # Record the end time
             end = time.time()
-
-
-            # Check if the run condition is still met
-            if event.GetData() == "pause":
-                self.stream.pause_stream()
-            if event.GetData() == "stop":
-                self.stream.stop_stream()
-                self.stream.close()
-                self.pya.terminate()
-                self.output_wavefile.close()
-
-                # Read the WAV file
-                sound = AudioSegment.from_wav(frame.output_filename)
-
-                # Split the filename at the last dot (.) to get the base name and extension
-                base, extension = frame.output_filename.rsplit('.', 1)
-                mp3_filename = f"{base}.mp3"
-
-                # Export the sound as MP3
-                sound.export(mp3_filename, format="mp3")
-                os.remove(frame.output_filename)
 
             # Yield to other threads
             wx.Yield()
@@ -175,15 +146,7 @@ class MyAudioCallback(wx.EvtHandler):
 if __name__ == "__main__":
     app = wx.App(False)
     frame = GUI(None)
-    # Create a dummy event to trigger the run_loop method
-    wx.PostEvent(frame, MyCustomEvent(data="dummy"))
-    #start the applications
     app.MainLoop()
-
-
-
-
-
 
 
 # print(f"* Tiempo total de grabacion: {formatted_time}")
