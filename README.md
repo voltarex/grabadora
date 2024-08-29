@@ -1,5 +1,10 @@
 Initial version
 
+---------------------------
+For exe creation:
+> pyinstaller --onefile --windowed --icon=grabadora.ico grabadora.py
+-----------------------------------------------------------------
+
 - 28.08.24 - About flaws using an event handler with a while loop:
 The issue you're encountering with the unresponsive GUI is due to the nature of how wxPython processes events. When you run an endless loop (like a while loop) inside an event handler, it blocks the main event loop, preventing wxPython from processing other events (like user interactions with buttons or even a stop signal).
 Key Points:

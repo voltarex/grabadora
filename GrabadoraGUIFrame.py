@@ -9,6 +9,9 @@
 
 import wx
 import wx.xrc
+import os
+import sys
+
 
 
 ###########################################################################
@@ -21,7 +24,7 @@ class GrabadoraGUIFrame(wx.Frame):
         wx.Frame.__init__(self, parent, id=wx.ID_ANY, title=u"Grabadora", pos=wx.DefaultPosition,
                           size=wx.Size(500, 330), style=wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL)
 
-        self.SetSizeHintsSz(wx.DefaultSize, wx.DefaultSize)
+        self.SetSizeHints(wx.DefaultSize, wx.DefaultSize)
 
         bSizerVertical = wx.BoxSizer(wx.VERTICAL)
 
@@ -81,14 +84,14 @@ class GrabadoraGUIFrame(wx.Frame):
         self.m_gaugeMicLevel.SetValue(0)
         bSizerVertical.Add(self.m_gaugeMicLevel, 0, wx.ALL | wx.EXPAND, 5)
 
-        self.m_staticText5 = wx.StaticText(self, wx.ID_ANY, u"    Volumen de salida", wx.DefaultPosition,
-                                           wx.DefaultSize, 0)
-        self.m_staticText5.Wrap(-1)
-        bSizerVertical.Add(self.m_staticText5, 0, wx.ALL, 5)
-
-        self.m_sliderVolumeOutput = wx.Slider(self, wx.ID_ANY, 9, 0, 10, wx.Point(-1, -1), wx.Size(300, -1),
-                                              wx.SL_AUTOTICKS | wx.SL_HORIZONTAL | wx.SL_LABELS)
-        bSizerVertical.Add(self.m_sliderVolumeOutput, 0, wx.ALL, 5)
+        # self.m_staticText5 = wx.StaticText(self, wx.ID_ANY, u"    Volumen de salida", wx.DefaultPosition,
+        #                                    wx.DefaultSize, 0)
+        # self.m_staticText5.Wrap(-1)
+        # bSizerVertical.Add(self.m_staticText5, 0, wx.ALL, 5)
+        #
+        # self.m_sliderVolumeOutput = wx.Slider(self, wx.ID_ANY, 10, 0, 10, wx.Point(-1, -1), wx.Size(300, -1),
+        #                                       wx.SL_AUTOTICKS | wx.SL_HORIZONTAL | wx.SL_LABELS)
+        # bSizerVertical.Add(self.m_sliderVolumeOutput, 0, wx.ALL, 5)
 
 
         self.m_buttonExit = wx.Button(self, wx.ID_ANY, u"Salir!", wx.DefaultPosition, wx.DefaultSize, 0)
@@ -104,11 +107,24 @@ class GrabadoraGUIFrame(wx.Frame):
         self.m_buttonStartRec.Bind(wx.EVT_BUTTON, self.onStartRec)
         self.m_buttonPauseRec.Bind(wx.EVT_BUTTON, self.onPauseRec)
         self.m_buttonStopRec.Bind(wx.EVT_BUTTON, self.onStopRec)
-        self.m_sliderVolumeOutput.Bind(wx.EVT_SCROLL, self.onVolumeUpdate)
+        #self.m_sliderVolumeOutput.Bind(wx.EVT_SCROLL, self.onVolumeUpdate)
         self.m_buttonExit.Bind(wx.EVT_BUTTON, self.onFrameExit)
+
+        # Determine the correct path to the icon file
+        icon_path = self.get_icon_path("grabadora.ico")
+
+        # Set the icon for the window
+        icon = wx.Icon(icon_path, wx.BITMAP_TYPE_ICO)
+        self.SetIcon(icon)
 
         self.Show(True)
 
+    def get_icon_path(self, filename):
+        # Handle the path correctly when running from an executable or script
+        if getattr(sys, 'frozen', False):  # When running as an executable
+            return os.path.join(sys._MEIPASS, filename)
+        else:
+            return filename  # Running from the script
 
     def __del__(self):
         pass
@@ -126,8 +142,8 @@ class GrabadoraGUIFrame(wx.Frame):
     def onStopRec(self, event):
         event.Skip()
 
-    def onVolumeUpdate(self, event):
-        event.Skip()
+    # def onVolumeUpdate(self, event):
+    #     event.Skip()
 
     def onFrameExit(self, event):
         event.Skip()
