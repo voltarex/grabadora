@@ -3,11 +3,13 @@ import wave
 import datetime
 import os
 import wx
+import logging
 
 import pyaudio
 from pydub import AudioSegment
 # from pynput import keyboard
 import numpy as np
+from scipy.signal import resample
 
 import GrabadoraGUIFrame
 
@@ -16,15 +18,34 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 44100
 
+# Set up logging
+logging.basicConfig(
+    filename='grabadora.log',       # Log file location
+    filemode='w',                   # Overwrite the log file instead of appending
+    level=logging.DEBUG,            # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    format='%(asctime)s - %(levelname)s - %(message)s'  # Log format
+)
 
-# Create a WAV file with a unique filename based on date and time
-now = datetime.datetime.now()
-formatted_time = ''
+
+def resample_audio(audio_data, orig_rate, target_rate):
+    num_samples = int(len(audio_data) * float(target_rate) / orig_rate)
+    return resample(audio_data, num_samples)
+
+def mono_to_stereo(mono_data):
+    return np.repeat(mono_data, 2)
+
+def stereo_to_mono(stereo_data):
+    return np.mean(stereo_data.reshape(-1, 2), axis=1)
+
 
 
 class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
     def __init__(self, parent):
+        logging.info("Start GrabadoraGUIFrame")
         GrabadoraGUIFrame.GrabadoraGUIFrame.__init__(self, parent)
+
+        # Create a WAV file with a unique filename based on date and time
+        now = datetime.datetime.now()
 
         self.audioCallback = MyAudioCallback(self)
         self.pya = None
@@ -32,56 +53,103 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         self.output_wavefile = None
         self.resume_after_stop = False
         self.peak_level_db = None
+
+        logging.info("Set output filename")
         self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
         self.m_textCtrlFilename.SetValue(self.output_filename)
 
         # Initialize variables for the time counter
+        logging.info("Create timer")
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.update_timer, self.timer)
         self.counter = 0
         self.running = False
 
     def onAudioNameUpdate(self, event):
+        logging.debug("output filename updated")
         self.output_filename = self.m_textCtrlFilename.GetValue()
         event.Skip()
 
     def onStartRec(self, event):
         # if all is already initialized and we return after a 'pause'
+        logging.info("onStartRec")
         if self.resume_after_stop:
+            logging.debug("stream.start_stream()")
             self.stream.start_stream()
         # this is the first 'start'
         else:
-            # lock the filename
-            self.m_textCtrlFilename.SetEditable(False)
+            try:
+                # lock the filename
+                self.m_textCtrlFilename.SetEditable(False)
+                logging.debug("Start pyaudio.PyAudio()")
+                self.pya = pyaudio.PyAudio()
 
-            self.pya = pyaudio.PyAudio()
-            self.stream = self.pya.open(format=self.pya.get_format_from_width(2),
-                                        channels=CHANNELS,
-                                        rate=44100,
-                                        input=True,
-                                        output=True,
-                                        stream_callback=self.audioCallback.audio_processing_callback)
+                # Get default input and output device info
+                input_device = self.pya.get_default_input_device_info()
+                output_device = self.pya.get_default_output_device_info()
 
-            self.output_wavefile = wave.open(frame.output_filename, 'wb')
-            self.output_wavefile.setnchannels(CHANNELS)
-            self.output_wavefile.setsampwidth(self.pya.get_sample_size(FORMAT))
-            self.output_wavefile.setframerate(RATE)
+                self.input_channels = input_device['maxInputChannels']
+                self.output_channels = output_device['maxOutputChannels']
+                self.input_rate = int(input_device['defaultSampleRate'])
+                self.output_rate = int(output_device['defaultSampleRate'])
 
-            # Record the start time
-            self.counter = 0  # Reset the counter on start
+                logging.debug(f"Default Input: {self.input_channels} channels at {self.input_rate} Hz")
+                logging.debug(f"Default Output: {self.output_channels} channels at {self.output_rate} Hz")
+                logging.debug("")
 
-        self.timer.Start(100)  # Start the timer to trigger every 100ms
 
-        frame.m_buttonStartRec.SetLabel("Grabando...")
-        frame.m_buttonPauseRec.Enable()
-        frame.m_buttonStopRec.Enable()
+                # List all audio devices and their information
+                for i in range(self.pya.get_device_count()):
+                    info = self.pya.get_device_info_by_index(i)
+                    logging.debug(f"Device {i}: {info['name']}")
+                    logging.debug(f"  Input Channels: {info['maxInputChannels']}")
+                    logging.debug(f"  Output Channels: {info['maxOutputChannels']}")
+
+                logging.debug("")
+                logging.debug("Open pyaudio.PyAudio()")
+                self.stream = self.pya.open(format=self.pya.get_format_from_width(2),
+                                            channels=self.input_channels,
+                                            rate=self.input_rate,
+                                            input=True,
+                                            output=True,
+                                            stream_callback=self.audioCallback.audio_processing_callback)
+
+                logging.debug("Open output_wavefile")
+                self.output_wavefile = wave.open(frame.output_filename, 'wb')
+                self.output_wavefile.setnchannels(self.output_channels)
+                self.output_wavefile.setsampwidth(self.pya.get_sample_size(FORMAT))
+                self.output_wavefile.setframerate(self.output_rate)
+
+                # Record the start time
+                self.counter = 0  # Reset the counter on start
+
+                logging.debug("Start timer")
+                self.timer.Start(100)  # Start the timer to trigger every 100ms
+
+                frame.m_buttonStartRec.SetLabel("Grabando...")
+                frame.m_buttonPauseRec.Enable()
+                frame.m_buttonStopRec.Enable()
+
+                logging.info("Audio stream successfully opened.")
+            except OSError as e:
+                logging.error(f"Failed to open audio stream: {str(e)}")
+                frame.m_buttonStartRec.SetLabel("ERROR!")
+                # Handle the error (e.g., disable functionality, show a message to the user)
+
+            except Exception as e:
+                logging.error(f"An unexpected error occurred: {str(e)}")
+                frame.m_buttonStartRec.SetLabel("ERROR!")
+
 
         event.Skip()
 
     def onPauseRec(self, event):
+        logging.info("onPausetRec")
+        logging.debug("stop_steam()")
         self.stream.stop_stream()
         self.resume_after_stop = True  # in case 'start' will be called again
 
+        logging.debug("stop timer")
         self.timer.Stop()  # Stop the timer
 
         frame.m_buttonStartRec.SetLabel("Retomar grabacion")
@@ -90,29 +158,44 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
 
 
     def onStopRec(self, event):
+        logging.info("onStopRec")
+        try:
+            logging.debug("stop timer")
+            self.timer.Stop()  # Stop the timer
 
-        self.timer.Stop()  # Stop the timer
+            logging.debug("stop stream")
+            self.stream.stop_stream()
+            logging.debug("close stream and output wave")
+            self.stream.close()
+            self.pya.terminate()
+            self.output_wavefile.close()
 
-        self.stream.stop_stream()
-        self.stream.close()
-        self.pya.terminate()
-        self.output_wavefile.close()
+            # Read the WAV file
+            logging.debug("read wave")
+            sound = AudioSegment.from_wav(frame.output_filename)
 
-        # Read the WAV file
-        sound = AudioSegment.from_wav(frame.output_filename)
+            # Split the filename at the last dot (.) to get the base name and extension
+            base, extension = frame.output_filename.rsplit('.', 1)
+            mp3_filename = f"{base}.mp3"
 
-        # Split the filename at the last dot (.) to get the base name and extension
-        base, extension = frame.output_filename.rsplit('.', 1)
-        mp3_filename = f"{base}.mp3"
+            # Export the sound as MP3
+            logging.debug("export wave to mp3")
+            sound.export(mp3_filename, format="mp3")
+            logging.debug("delete wave")
+            os.remove(frame.output_filename)
 
-        # Export the sound as MP3
-        sound.export(mp3_filename, format="mp3")
-        os.remove(frame.output_filename)
+            logging.debug("disable all buttons")
+            frame.m_buttonStopRec.SetLabel("Grabacion concluida.")
+            frame.m_buttonStartRec.Disable()
+            frame.m_buttonPauseRec.Disable()
+            frame.m_buttonStopRec.Disable()
+            logging.info("All closed successfully.")
+        except OSError as e:
+            logging.error(f"Failed to close audio stream: {str(e)}")
+            # Handle the error (e.g., disable functionality, show a message to the user)
 
-        frame.m_buttonStopRec.SetLabel("Grabacion concluida.")
-        frame.m_buttonStartRec.Disable()
-        frame.m_buttonPauseRec.Disable()
-        frame.m_buttonStopRec.Disable()
+        except Exception as e:
+            logging.error(f"An unexpected error occurred: {str(e)}")
 
         event.Skip()
 
@@ -151,6 +234,7 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         return int((self.peak_level_db - db_min) / (db_max - db_min) * 100)
 
     def onFrameExit(self, event):
+        logging.debug("onFrameExit")
         wx.Exit()  # This will close the entire application
 
 
@@ -171,22 +255,42 @@ class MyAudioCallback(wx.EvtHandler):
         # Calculate peak level in decibels (dB)
         self.instance.peak_level_db = 20 * np.log10(peak_level / np.iinfo(np.int16).max)
 
-        # Adjust volume (multiply by 0.5 for 50% reduction)
-        adjusted_data = bytearray(int(sample) for sample in in_data)
+        # Resample if needed (input_rate != output_rate)
+        if self.instance.input_rate != self.instance.output_rate:
+            audio_data = resample_audio(audio_data, self.instance.input_rate, self.instance.output_rate)
+
+        # Handle channel differences
+        if self.instance.input_channels == 1 and self.instance.output_channels == 2:
+            audio_data = mono_to_stereo(audio_data)
+        elif self.instance.input_channels == 2 and self.instance.output_channels == 1:
+            audio_data = stereo_to_mono(audio_data)
 
         # Process audio data for recording (e.g., write to a buffer)
         # output_wavefile.writeframes(in_data)  # Write data to the WAV file
         while self.instance.output_wavefile is None:
             time.sleep(1)
 
-        self.instance.output_wavefile.writeframes(adjusted_data)  # Write data to the WAV file
-        return in_data, pyaudio.paContinue
+        self.instance.output_wavefile.writeframes(audio_data)  # Write data to the WAV file
+
+        # Convert back to bytes
+        out_data = audio_data.astype(np.int16).tobytes()
+
+        return (out_data, pyaudio.paContinue)
+
+        # Adjust volume (multiply by 0.5 for 50% reduction)
+        #adjusted_data = bytearray(int(sample) for sample in in_data)
+        #return in_data, pyaudio.paContinue
 
 
 if __name__ == "__main__":
+    logging.info("Application starting.")
     app = wx.App(False)
+    logging.info("Frame starting.")
     frame = GUI(None)
+    logging.info("Start frame.update_display()")
     frame.update_display()  # Show initial time in the text control
+    logging.info("Disable Pause & Stop buttons")
     frame.m_buttonPauseRec.Disable()
     frame.m_buttonStopRec.Disable()
+    logging.info("Start main loop")
     app.MainLoop()
