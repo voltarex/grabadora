@@ -12,8 +12,6 @@ import wx.xrc
 import os
 import sys
 
-
-
 ###########################################################################
 ## Class GrabadoraGUIFrame
 ###########################################################################
@@ -84,16 +82,6 @@ class GrabadoraGUIFrame(wx.Frame):
         self.m_gaugeMicLevel.SetValue(0)
         bSizerVertical.Add(self.m_gaugeMicLevel, 0, wx.ALL | wx.EXPAND, 5)
 
-        # self.m_staticText5 = wx.StaticText(self, wx.ID_ANY, u"    Volumen de salida", wx.DefaultPosition,
-        #                                    wx.DefaultSize, 0)
-        # self.m_staticText5.Wrap(-1)
-        # bSizerVertical.Add(self.m_staticText5, 0, wx.ALL, 5)
-        #
-        # self.m_sliderVolumeOutput = wx.Slider(self, wx.ID_ANY, 10, 0, 10, wx.Point(-1, -1), wx.Size(300, -1),
-        #                                       wx.SL_AUTOTICKS | wx.SL_HORIZONTAL | wx.SL_LABELS)
-        # bSizerVertical.Add(self.m_sliderVolumeOutput, 0, wx.ALL, 5)
-
-
         self.m_buttonExit = wx.Button(self, wx.ID_ANY, u"Salir!", wx.DefaultPosition, wx.DefaultSize, 0)
         bSizerVertical.Add(self.m_buttonExit, 0, wx.ALL, 5)
 
@@ -141,9 +129,6 @@ class GrabadoraGUIFrame(wx.Frame):
 
     def onStopRec(self, event):
         event.Skip()
-
-    # def onVolumeUpdate(self, event):
-    #     event.Skip()
 
     def onFrameExit(self, event):
         event.Skip()

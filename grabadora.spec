@@ -5,7 +5,7 @@ a = Analysis(
     ['grabadora.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('grabadora.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

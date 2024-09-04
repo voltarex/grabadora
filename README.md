@@ -2,7 +2,7 @@ Initial version
 
 ---------------------------
 For exe creation:
-> pyinstaller --onefile --windowed --icon=grabadora.ico --add-data="grabadora.ico;." grabadora.py
+> pyinstaller --windowed --icon=grabadora.ico --add-data="grabadora.ico;." grabadora.py
 -----------------------------------------------------------------
 
 - 28.08.24 - About flaws using an event handler with a while loop:
