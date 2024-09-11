@@ -31,10 +31,21 @@ class GrabadoraGUIFrame(wx.Frame):
         self.m_staticText1.Wrap(-1)
         bSizerVertical.Add(self.m_staticText1, 0, wx.ALL | wx.EXPAND, 5)
 
+        bSizerHorizontal_0 = wx.BoxSizer(wx.HORIZONTAL)
         self.m_textCtrlFilename = wx.TextCtrl(self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize,
                                               wx.TE_PROCESS_ENTER)
 
-        bSizerVertical.Add(self.m_textCtrlFilename, 0, wx.ALL | wx.EXPAND, 5)
+        bSizerHorizontal_0.Add(self.m_textCtrlFilename, 1, wx.ALL | wx.EXPAND, 5)
+
+        # Create a button with a file manager icon next to the TextCtrl
+        self.m_buttonBrowse = wx.Button(self, wx.ID_ANY, "", wx.DefaultPosition, wx.Size(30, 30))
+        self.m_buttonBrowse.SetBitmap(wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_BUTTON))
+        bSizerHorizontal_0.Add(self.m_buttonBrowse, 0, wx.ALL, 5)
+
+        # Add the horizontal sizer to the vertical sizer
+        bSizerVertical.Add(bSizerHorizontal_0, 0, wx.EXPAND, 5)
+
+
 
         bSizerHorizontal_1 = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -82,6 +93,23 @@ class GrabadoraGUIFrame(wx.Frame):
         self.m_gaugeMicLevel.SetValue(0)
         bSizerVertical.Add(self.m_gaugeMicLevel, 0, wx.ALL | wx.EXPAND, 5)
 
+        ##
+        self.m_staticText12 = wx.StaticText(self, wx.ID_ANY, u"      Amplificacion del microfono", wx.DefaultPosition,
+                                            wx.DefaultSize, 0)
+        self.m_staticText12.Wrap(-1)
+        bSizerVertical.Add(self.m_staticText12, 0, 0, 5)
+
+        self.m_gain_slider = wx.Slider(self, value=10, minValue=1, maxValue=40, style=wx.SL_HORIZONTAL)
+        # Add tick marks to the slider
+        self.m_gain_slider.SetTickFreq(1)
+
+        # Create a label to display the current value
+        self.m_slider_label = wx.StaticText(self, label=f"Amplificación: {self.m_gain_slider.GetValue()}")
+
+        bSizerVertical.Add(self.m_gain_slider, 0, wx.ALL | wx.EXPAND, 5)
+        bSizerVertical.Add(self.m_slider_label, flag=wx.CENTER | wx.ALL, border=10)
+
+        ##
         self.m_buttonExit = wx.Button(self, wx.ID_ANY, u"Salir!", wx.DefaultPosition, wx.DefaultSize, 0)
         bSizerVertical.Add(self.m_buttonExit, 0, wx.ALL, 5)
 
@@ -92,9 +120,12 @@ class GrabadoraGUIFrame(wx.Frame):
 
         # Connect Events
         self.m_textCtrlFilename.Bind(wx.EVT_KILL_FOCUS, self.onAudioNameUpdate)
+        self.m_buttonBrowse.Bind(wx.EVT_BUTTON, self.on_browse)
         self.m_buttonStartRec.Bind(wx.EVT_BUTTON, self.onStartRec)
         self.m_buttonPauseRec.Bind(wx.EVT_BUTTON, self.onPauseRec)
         self.m_buttonStopRec.Bind(wx.EVT_BUTTON, self.onStopRec)
+        self.m_gain_slider.Bind(wx.EVT_SLIDER, self.onGainChange)
+
         #self.m_sliderVolumeOutput.Bind(wx.EVT_SCROLL, self.onVolumeUpdate)
         self.m_buttonExit.Bind(wx.EVT_BUTTON, self.onFrameExit)
 
@@ -117,6 +148,25 @@ class GrabadoraGUIFrame(wx.Frame):
     def __del__(self):
         pass
 
+    def on_browse(self, event):
+
+        # Get the current filename from the TextCtrl
+        default_filename = self.m_textCtrlFilename.GetValue()
+
+        # Create a file dialog for saving the file
+        with wx.FileDialog(self, "Guardar archivo de audio", defaultDir=".", defaultFile=default_filename, wildcard="WAV files (*.wav)|*.wav",
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as save_dialog:
+
+            # Show the dialog and check if the user pressed OK
+            if save_dialog.ShowModal() == wx.ID_OK:
+                # Get the chosen file path
+                save_path = save_dialog.GetPath()
+
+                # Set the file path in the TextCtrl
+                self.m_textCtrlFilename.SetValue(save_path)
+
+        event.Skip()
+
     # Virtual event handlers, override them in your derived class
     def onAudioNameUpdate(self, event):
         event.Skip()
@@ -128,6 +178,9 @@ class GrabadoraGUIFrame(wx.Frame):
         event.Skip()
 
     def onStopRec(self, event):
+        event.Skip()
+
+    def onGainChange(self, event):
         event.Skip()
 
     def onFrameExit(self, event):

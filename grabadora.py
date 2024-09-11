@@ -5,12 +5,10 @@ import os
 import wx
 import logging
 import subprocess
-
 import pyaudio
 from pydub import AudioSegment
-# from pynput import keyboard
 import numpy as np
-# from scipy.signal import resample
+
 
 import GrabadoraGUIFrame
 
@@ -18,6 +16,8 @@ import GrabadoraGUIFrame
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
+CHUNK = 1024
+GAIN = 2.0
 
 # Set up logging
 logging.basicConfig(
@@ -74,6 +74,7 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         self.output_wavefile = None
         self.state_fsm = "init"
         self.peak_level_db = None
+        self.current_gain = 1.0  # Initial gain value, can be adjusted by the user
 
         logging.info("Set output filename")
         self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
@@ -97,6 +98,12 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         self.output_filename = self.m_textCtrlFilename.GetValue()
         event.Skip()
 
+    # def on_browse(self, event):
+    #
+    #     logging.debug("output filename updated through FileDialog")
+    #     self.output_filename = self.m_textCtrlFilename.GetValue()
+    #     event.Skip()
+
     def onStartRec(self, event):
         # if all is already initialized and we return after a 'pause'
         logging.info("onStartRec")
@@ -119,6 +126,8 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
             try:
                 # lock the filename
                 self.m_textCtrlFilename.SetEditable(False)
+                self.output_filename = self.m_textCtrlFilename.GetValue()
+
                 logging.debug("Start pyaudio.PyAudio()")
                 self.pya = pyaudio.PyAudio()
 
@@ -150,6 +159,7 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
                                             rate=RATE,
                                             input=True,
                                             output=True,
+                                            frames_per_buffer=CHUNK,
                                             stream_callback=self.audioCallback.audio_processing_callback)
 
                 logging.debug("Open output_wavefile")
@@ -227,7 +237,7 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
 
                     # Export the sound as MP3
                     logging.debug(f"export wave {frame.output_filename} to {mp3_filename}")
-                    sound.export(mp3_filename, format="mp3")
+                    sound.export(mp3_filename, format="mp3", bitrate="192k")
                     logging.debug("delete wave")
                     os.remove(frame.output_filename)
 
@@ -247,6 +257,14 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
             except Exception as e:
                 logging.error(f"An unexpected error occurred: {str(e)}")
                 self.state_fsm = "error"
+
+        event.Skip()
+
+    def onGainChange(self, event):
+        slider_value = self.m_gain_slider.GetValue()
+        self.current_gain = slider_value / 10.0  # Adjust gain based on slider position
+
+        self.m_slider_label.SetLabel(f"Amplificación: {slider_value}")
 
         event.Skip()
 
@@ -300,37 +318,30 @@ class MyAudioCallback(wx.EvtHandler):
         # Convert audio data to NumPy array
         audio_data = np.frombuffer(in_data, dtype=np.int16)
 
+        # Apply gain dynamically
+        adjusted_gain = self.instance.current_gain  # Use the current gain from the instance
+        amplified_data = np.clip(audio_data * adjusted_gain, -32768, 32767).astype(np.int16)  # Apply gain and clip
+        # amplified_data = np.clip(audio_data * adjusted_gain, np.iinfo(np.int16).min, np.iinfo(np.int16).max).astype(np.int16)
+
         # Calculate the peak level (maximum absolute value)
-        peak_level = np.max(np.abs(audio_data))
+        peak_level = np.max(np.abs(amplified_data))
 
-        # Calculate peak level in decibels (dB)
-        self.instance.peak_level_db = 20 * np.log10(peak_level / np.iinfo(np.int16).max)
-
-        # # Resample if needed (input_rate != output_rate)
-        # if self.instance.input_rate != self.instance.output_rate:
-        #     audio_data = resample_audio(audio_data, self.instance.input_rate, self.instance.output_rate)
-        #
-        # # Handle channel differences
-        # if self.instance.input_channels == 1 and self.instance.output_channels == 2:
-        #     audio_data = mono_to_stereo(audio_data)
-        # elif self.instance.input_channels == 2 and self.instance.output_channels == 1:
-        #     audio_data = stereo_to_mono(audio_data)
+        # Avoid divide by zero issue by checking if peak_level is 0
+        if peak_level > 0:
+            self.instance.peak_level_db = 20 * np.log10(peak_level / np.iinfo(np.int16).max)
+        else:
+            self.instance.peak_level_db = -100  # Set to a very low dB value for silence
 
         # Process audio data for recording (e.g., write to a buffer)
-        # output_wavefile.writeframes(in_data)  # Write data to the WAV file
         while self.instance.output_wavefile is None:
             time.sleep(1)
 
-        self.instance.output_wavefile.writeframes(audio_data)  # Write data to the WAV file
+        self.instance.output_wavefile.writeframes(amplified_data)  # Write data to the WAV file
 
         # Convert back to bytes
-        out_data = audio_data.astype(np.int16).tobytes()
+        out_data = amplified_data.tobytes()
 
         return (out_data, pyaudio.paContinue)
-
-        # Adjust volume (multiply by 0.5 for 50% reduction)
-        #adjusted_data = bytearray(int(sample) for sample in in_data)
-        #return in_data, pyaudio.paContinue
 
 
 if __name__ == "__main__":
