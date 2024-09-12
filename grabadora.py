@@ -8,7 +8,7 @@ import subprocess
 import pyaudio
 from pydub import AudioSegment
 import numpy as np
-
+from pathlib import Path
 
 import GrabadoraGUIFrame
 
@@ -87,6 +87,19 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         self.counter = 0
         self.running = False
 
+        # Get the path to the user's desktop
+        desktop_path = Path(os.path.join(os.environ['USERPROFILE'], 'Desktop'))
+
+        # Define the path for the "CdS Audio" directory
+        self.cds_audio_path = desktop_path / "CdS Audio"
+
+        # Check if the directory exists, and if not, create it
+        if not self.cds_audio_path.exists():
+            self.cds_audio_path.mkdir(parents=True)
+            logging.info(f'Directory "CdS Audio" created at: {self.cds_audio_path}')
+        else:
+            logging.info(f'Directory "CdS Audio" already exists at: {self.cds_audio_path}')
+
         self.export = True
         if not check_ffmpeg_installed():
             notify_ffmpeg_missing()
@@ -96,13 +109,32 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
     def onAudioNameUpdate(self, event):
         logging.debug("output filename updated")
         self.output_filename = self.m_textCtrlFilename.GetValue()
+        if not self.output_filename.endswith('.wav'):
+            self.output_filename += '.wav'
+
         event.Skip()
 
-    # def on_browse(self, event):
-    #
-    #     logging.debug("output filename updated through FileDialog")
-    #     self.output_filename = self.m_textCtrlFilename.GetValue()
-    #     event.Skip()
+    def onReInit(self, event):
+
+        logging.info("Reinitializing!")
+
+        # Create a WAV file with a unique filename based on date and time
+        now = datetime.datetime.now()
+
+        logging.info("Set output filename")
+        self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
+        self.m_textCtrlFilename.SetValue(self.output_filename)
+
+        frame.m_buttonStartRec.SetLabel("Comenzar grabacion.")
+        frame.m_buttonStartRec.Enable()
+        frame.m_buttonReInit.Disable()
+        self.m_textCtrlFilename.SetEditable(True)
+        self.counter = 0  # reset timer + timer display
+        self.update_display()
+
+        self.state_fsm = "init"
+
+        event.Skip()
 
     def onStartRec(self, event):
         # if all is already initialized and we return after a 'pause'
@@ -127,6 +159,8 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
                 # lock the filename
                 self.m_textCtrlFilename.SetEditable(False)
                 self.output_filename = self.m_textCtrlFilename.GetValue()
+                if not self.output_filename.endswith('.wav'):
+                    self.output_filename += '.wav'
 
                 logging.debug("Start pyaudio.PyAudio()")
                 self.pya = pyaudio.PyAudio()
@@ -163,7 +197,8 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
                                             stream_callback=self.audioCallback.audio_processing_callback)
 
                 logging.debug("Open output_wavefile")
-                self.output_wavefile = wave.open(frame.output_filename, 'wb')
+                self.output_filename = os.path.join(self.cds_audio_path, self.output_filename)
+                self.output_wavefile = wave.open(self.output_filename, 'wb')
                 self.output_wavefile.setnchannels(CHANNELS)
                 self.output_wavefile.setsampwidth(self.pya.get_sample_size(FORMAT))
                 self.output_wavefile.setframerate(RATE)
@@ -243,9 +278,13 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
 
                 logging.debug("disable all buttons")
                 frame.m_buttonStopRec.SetLabel("Grabacion concluida.")
+                frame.m_buttonStartRec.SetLabel("Grabacion concluida.")
+                frame.m_buttonPauseRec.SetLabel("Grabacion concluida.")
                 frame.m_buttonStartRec.Disable()
                 frame.m_buttonPauseRec.Disable()
                 frame.m_buttonStopRec.Disable()
+                frame.m_buttonReInit.Enable()
+
                 logging.info("All closed successfully.")
 
                 self.state_fsm = "stop"
@@ -352,6 +391,7 @@ if __name__ == "__main__":
     logging.info("Start frame.update_display()")
     frame.update_display()  # Show initial time in the text control
     logging.info("Disable Pause & Stop buttons")
+    frame.m_buttonReInit.Disable()
     frame.m_buttonPauseRec.Disable()
     frame.m_buttonStopRec.Disable()
     logging.info("Start main loop")

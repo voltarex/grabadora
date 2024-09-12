@@ -11,6 +11,8 @@ import wx
 import wx.xrc
 import os
 import sys
+from pathlib import Path
+
 
 ###########################################################################
 ## Class GrabadoraGUIFrame
@@ -20,7 +22,7 @@ class GrabadoraGUIFrame(wx.Frame):
 
     def __init__(self, parent):
         wx.Frame.__init__(self, parent, id=wx.ID_ANY, title=u"Grabadora", pos=wx.DefaultPosition,
-                          size=wx.Size(500, 330), style=wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL)
+                          size=wx.Size(500, 400), style=wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL)
 
         self.SetSizeHints(wx.DefaultSize, wx.DefaultSize)
 
@@ -45,7 +47,19 @@ class GrabadoraGUIFrame(wx.Frame):
         # Add the horizontal sizer to the vertical sizer
         bSizerVertical.Add(bSizerHorizontal_0, 0, wx.EXPAND, 5)
 
+        bSizerHorizontal_2 = wx.BoxSizer(wx.HORIZONTAL)
 
+        self.m_buttonReInit = wx.Button(self, wx.ID_ANY, u"Reinicializar", wx.Point(-1, -1), wx.Size(150,30), 0)
+        self.m_buttonReInit.SetBackgroundColour(wx.Colour(0, 0, 128))  # Blue background
+
+        # Set the button's foreground color (text color)
+        self.m_buttonReInit.SetForegroundColour(wx.Colour(255, 255, 255))  # White text
+        bSizerHorizontal_2.Add(self.m_buttonReInit, 0, 0, 5)
+
+        bSizerVertical.Add(bSizerHorizontal_2, 0, wx.ALIGN_CENTER_HORIZONTAL, 5)
+
+        # Add space between the two horizontal sizers (20px spacer)
+        bSizerVertical.AddSpacer(20)  # Adds 20 pixels of vertical space
 
         bSizerHorizontal_1 = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -93,7 +107,6 @@ class GrabadoraGUIFrame(wx.Frame):
         self.m_gaugeMicLevel.SetValue(0)
         bSizerVertical.Add(self.m_gaugeMicLevel, 0, wx.ALL | wx.EXPAND, 5)
 
-        ##
         self.m_staticText12 = wx.StaticText(self, wx.ID_ANY, u"      Amplificacion del microfono", wx.DefaultPosition,
                                             wx.DefaultSize, 0)
         self.m_staticText12.Wrap(-1)
@@ -109,7 +122,6 @@ class GrabadoraGUIFrame(wx.Frame):
         bSizerVertical.Add(self.m_gain_slider, 0, wx.ALL | wx.EXPAND, 5)
         bSizerVertical.Add(self.m_slider_label, flag=wx.CENTER | wx.ALL, border=10)
 
-        ##
         self.m_buttonExit = wx.Button(self, wx.ID_ANY, u"Salir!", wx.DefaultPosition, wx.DefaultSize, 0)
         bSizerVertical.Add(self.m_buttonExit, 0, wx.ALL, 5)
 
@@ -121,6 +133,7 @@ class GrabadoraGUIFrame(wx.Frame):
         # Connect Events
         self.m_textCtrlFilename.Bind(wx.EVT_KILL_FOCUS, self.onAudioNameUpdate)
         self.m_buttonBrowse.Bind(wx.EVT_BUTTON, self.on_browse)
+        self.m_buttonReInit.Bind(wx.EVT_BUTTON, self.onReInit)
         self.m_buttonStartRec.Bind(wx.EVT_BUTTON, self.onStartRec)
         self.m_buttonPauseRec.Bind(wx.EVT_BUTTON, self.onPauseRec)
         self.m_buttonStopRec.Bind(wx.EVT_BUTTON, self.onStopRec)
@@ -153,8 +166,14 @@ class GrabadoraGUIFrame(wx.Frame):
         # Get the current filename from the TextCtrl
         default_filename = self.m_textCtrlFilename.GetValue()
 
+        desktop_path = Path(os.path.join(os.environ['USERPROFILE'], 'Desktop'))
+
+        # Define the path for the "CdS Audio" directory
+        cds_audio_path = desktop_path / "CdS Audio"
+
+
         # Create a file dialog for saving the file
-        with wx.FileDialog(self, "Guardar archivo de audio", defaultDir=".", defaultFile=default_filename, wildcard="WAV files (*.wav)|*.wav",
+        with wx.FileDialog(self, "Guardar archivo de audio", defaultDir=str(cds_audio_path), defaultFile=default_filename, wildcard="WAV files (*.wav)|*.wav",
                            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as save_dialog:
 
             # Show the dialog and check if the user pressed OK
@@ -169,6 +188,9 @@ class GrabadoraGUIFrame(wx.Frame):
 
     # Virtual event handlers, override them in your derived class
     def onAudioNameUpdate(self, event):
+        event.Skip()
+
+    def onReInit(self, event):
         event.Skip()
 
     def onStartRec(self, event):
