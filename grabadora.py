@@ -78,7 +78,8 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
 
         logging.info("Set output filename")
         self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
-        self.m_textCtrlFilename.SetValue(self.output_filename)
+        base, extension = self.output_filename.rsplit('.', 1)
+        self.m_textCtrlFilename.SetValue(base)
 
         # Initialize variables for the time counter
         logging.info("Create timer")
@@ -123,9 +124,12 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
 
         logging.info("Set output filename")
         self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
-        self.m_textCtrlFilename.SetValue(self.output_filename)
+        base, extension = self.output_filename.rsplit('.', 1)
+        self.m_textCtrlFilename.SetValue(base)
 
         frame.m_buttonStartRec.SetLabel("Comenzar grabacion.")
+        frame.m_buttonPauseRec.SetLabel("Pausar grabacion.")
+        frame.m_buttonStopRec.SetLabel("Finalizar grabacion.")
         frame.m_buttonStartRec.Enable()
         frame.m_buttonReInit.Disable()
         self.m_textCtrlFilename.SetEditable(True)

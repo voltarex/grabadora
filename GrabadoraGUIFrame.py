@@ -13,6 +13,7 @@ import os
 import sys
 from pathlib import Path
 
+VERSION = "v1.12"
 
 ###########################################################################
 ## Class GrabadoraGUIFrame
@@ -78,7 +79,7 @@ class GrabadoraGUIFrame(wx.Frame):
         bSizerHorizontal_1.Add(self.m_buttonPauseRec, 1, 0, 5)
 
         self.m_buttonStopRec = wx.Button(self, wx.ID_ANY, u"Finalizar grabacion", wx.DefaultPosition, wx.DefaultSize, 0)
-        self.m_buttonStopRec.SetBackgroundColour(wx.Colour(255, 87, 74))  # Red background
+        self.m_buttonStopRec.SetBackgroundColour(wx.Colour(255, 165, 0))  # Red background
 
         # Set the button's foreground color (text color)
         self.m_buttonStopRec.SetForegroundColour(wx.Colour(0, 0, 0))  # Black text
@@ -122,8 +123,23 @@ class GrabadoraGUIFrame(wx.Frame):
         bSizerVertical.Add(self.m_gain_slider, 0, wx.ALL | wx.EXPAND, 5)
         bSizerVertical.Add(self.m_slider_label, flag=wx.CENTER | wx.ALL, border=10)
 
+        # Create a horizontal sizer
+        bSizerHorizontal_3 = wx.BoxSizer(wx.HORIZONTAL)
         self.m_buttonExit = wx.Button(self, wx.ID_ANY, u"Salir!", wx.DefaultPosition, wx.DefaultSize, 0)
-        bSizerVertical.Add(self.m_buttonExit, 0, wx.ALL, 5)
+
+        # Add the button to the horizontal sizer
+        bSizerHorizontal_3.Add(self.m_buttonExit, 0, wx.ALL, 5)
+
+        # Add a stretchable space to push the text to the right
+        bSizerHorizontal_3.AddStretchSpacer(1)
+
+        # Create the text label
+        self.m_textLabel = wx.StaticText(self, wx.ID_ANY, VERSION, wx.DefaultPosition, wx.DefaultSize, 0)
+
+        # Add the text label to the horizontal sizer
+        bSizerHorizontal_3.Add(self.m_textLabel, 0, wx.ALL | wx.ALIGN_CENTRE_VERTICAL, 5)
+
+        bSizerVertical.Add(bSizerHorizontal_3, 0, wx.EXPAND, 5)
 
         self.SetSizer(bSizerVertical)
         self.Layout()
@@ -182,7 +198,10 @@ class GrabadoraGUIFrame(wx.Frame):
                 save_path = save_dialog.GetPath()
 
                 # Set the file path in the TextCtrl
-                self.m_textCtrlFilename.SetValue(save_path)
+                if save_path.endswith('.wav'):
+                    base, extension = save_path.rsplit('.', 1)
+
+                self.m_textCtrlFilename.SetValue(base)
 
         event.Skip()
 
