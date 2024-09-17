@@ -134,6 +134,9 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         frame.m_buttonReInit.Disable()
         self.m_textCtrlFilename.SetEditable(True)
         self.counter = 0  # reset timer + timer display
+        self.current_gain = 1.0 # reset the gain
+        self.m_gain_slider.SetValue(10)
+        self.m_slider_label.SetLabel(f"Amplificación: {10}")
         self.update_display()
 
         self.state_fsm = "init"
