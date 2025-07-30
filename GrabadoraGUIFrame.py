@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 
-VERSION = "v1.12"
+VERSION = "v1.13"
 
 ###########################################################################
 ## Class GrabadoraGUIFrame
@@ -113,7 +113,7 @@ class GrabadoraGUIFrame(wx.Frame):
         self.m_staticText12.Wrap(-1)
         bSizerVertical.Add(self.m_staticText12, 0, 0, 5)
 
-        self.m_gain_slider = wx.Slider(self, value=10, minValue=1, maxValue=40, style=wx.SL_HORIZONTAL)
+        self.m_gain_slider = wx.Slider(self, value=20, minValue=1, maxValue=40, style=wx.SL_HORIZONTAL)
         # Add tick marks to the slider
         self.m_gain_slider.SetTickFreq(1)
 

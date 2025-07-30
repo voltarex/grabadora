@@ -80,6 +80,7 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
         base, extension = self.output_filename.rsplit('.', 1)
         self.m_textCtrlFilename.SetValue(base)
+        self.m_textCtrlFilename.SetEditable(True)
 
         # Initialize variables for the time counter
         logging.info("Create timer")
@@ -132,11 +133,13 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         frame.m_buttonStopRec.SetLabel("Finalizar grabacion.")
         frame.m_buttonStartRec.Enable()
         frame.m_buttonReInit.Disable()
+        self.m_textCtrlFilename.Enable()
         self.m_textCtrlFilename.SetEditable(True)
+
         self.counter = 0  # reset timer + timer display
         self.current_gain = 1.0 # reset the gain
-        self.m_gain_slider.SetValue(10)
-        self.m_slider_label.SetLabel(f"Amplificación: {10}")
+        self.m_gain_slider.SetValue(20)
+        self.m_slider_label.SetLabel(f"Amplificación: {20}")
         self.update_display()
 
         self.state_fsm = "init"
@@ -165,6 +168,7 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
             try:
                 # lock the filename
                 self.m_textCtrlFilename.SetEditable(False)
+                self.m_textCtrlFilename.Disable()
                 self.output_filename = self.m_textCtrlFilename.GetValue()
                 if not self.output_filename.endswith('.wav'):
                     self.output_filename += '.wav'
@@ -240,7 +244,8 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         if self.state_fsm == "start":
             logging.info("onPausetRec")
             logging.debug("stop_steam()")
-            self.stream.stop_stream()
+            # we don't stop the stream on 'pause', to allow keep monitoring
+            # self.stream.stop_stream()
 
             logging.debug("stop timer")
             self.timer.Stop()  # Stop the timer
@@ -382,7 +387,9 @@ class MyAudioCallback(wx.EvtHandler):
         while self.instance.output_wavefile is None:
             time.sleep(1)
 
-        self.instance.output_wavefile.writeframes(amplified_data)  # Write data to the WAV file
+        # only write to output file if in start mode; if pause, don't
+        if self.instance.state_fsm == "start":
+            self.instance.output_wavefile.writeframes(amplified_data)  # Write data to the WAV file
 
         # Convert back to bytes
         out_data = amplified_data.tobytes()
