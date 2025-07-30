@@ -2,7 +2,7 @@ Initial version
 
 ---------------------------
 For exe creation:
-> pyinstaller --windowed --noconfirm --icon=grabadora.ico --add-data="grabadora.ico;."grabadora.py
+> pyinstaller --windowed --noconfirm --icon=grabadora.ico --add-data="grabadora.ico;." grabadora.py
 -----------------------------------------------------------------
 
 - v1.13 updates:
