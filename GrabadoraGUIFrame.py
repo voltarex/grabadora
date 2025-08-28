@@ -1,11 +1,55 @@
-# -*- coding: utf-8 -*-
+"""
+Audio Recorder GUI Application
+==============================
 
-###########################################################################
-## Python code generated with wxFormBuilder (version Jun 17 2015)
-## http://www.wxformbuilder.org/
-##
-## ANY EDIT OF THIS FILE will be override if changes in wxFormBuilder !
-###########################################################################
+Description:
+    A wxPython-based graphical interface for audio recording and monitoring.
+    Uses PyAudio for real-time audio input/output, records to WAV format,
+    and optionally converts recordings to MP3 using FFmpeg (if installed).
+
+Features:
+    - Monitor microphone input with live peak level display.
+    - Start and stop audio recording.
+    - Save recordings to WAV format and optionally export to MP3.
+    - Adjustable input gain via a slider control.
+    - Timer display showing elapsed recording time.
+
+Dependencies:
+    - Python 3.x
+    - wxPython
+    - PyAudio
+    - NumPy
+    - pydub
+    - gevent
+    - FFmpeg (optional, for MP3 export)
+
+Author: Aaron Elberg (voltarex)
+Created: 24-Aug-2024
+Last Updated:
+License:
+MIT License
+
+Copyright (c) 2024 Aaron Elberg, aka voltarex
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+"""
 
 import wx
 import wx.xrc
@@ -13,7 +57,7 @@ import os
 import sys
 from pathlib import Path
 
-VERSION = "v1.13"
+VERSION = "v2.0"
 
 ###########################################################################
 ## Class GrabadoraGUIFrame
@@ -50,12 +94,12 @@ class GrabadoraGUIFrame(wx.Frame):
 
         bSizerHorizontal_2 = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.m_buttonReInit = wx.Button(self, wx.ID_ANY, u"Reinicializar", wx.Point(-1, -1), wx.Size(150,30), 0)
-        self.m_buttonReInit.SetBackgroundColour(wx.Colour(0, 0, 128))  # Blue background
+        self.m_buttonMonitor = wx.Button(self, wx.ID_ANY, u"Iniciar monitor", wx.Point(-1, -1), wx.Size(150,30), 0)
+        self.m_buttonMonitor.SetBackgroundColour(wx.Colour(0, 0, 128))  # Blue background
 
         # Set the button's foreground color (text color)
-        self.m_buttonReInit.SetForegroundColour(wx.Colour(255, 255, 255))  # White text
-        bSizerHorizontal_2.Add(self.m_buttonReInit, 0, 0, 5)
+        self.m_buttonMonitor.SetForegroundColour(wx.Colour(255, 255, 255))  # White text
+        bSizerHorizontal_2.Add(self.m_buttonMonitor, 0, 0, 5)
 
         bSizerVertical.Add(bSizerHorizontal_2, 0, wx.ALIGN_CENTER_HORIZONTAL, 5)
 
@@ -64,19 +108,12 @@ class GrabadoraGUIFrame(wx.Frame):
 
         bSizerHorizontal_1 = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.m_buttonStartRec = wx.Button(self, wx.ID_ANY, u"Comenzar grabacion", wx.Point(-1, -1), wx.DefaultSize, 0)
+        self.m_buttonStartRec = wx.Button(self, wx.ID_ANY, u"Iniciar grabacion", wx.Point(-1, -1), wx.DefaultSize, 0)
         self.m_buttonStartRec.SetBackgroundColour(wx.Colour(63, 239, 21))  # Green background
 
         # Set the button's foreground color (text color)
         self.m_buttonStartRec.SetForegroundColour(wx.Colour(0, 0, 0))  # Black text
         bSizerHorizontal_1.Add(self.m_buttonStartRec, 1, 0, 5)
-
-        self.m_buttonPauseRec = wx.Button(self, wx.ID_ANY, u"Pausar grabacion", wx.Point(-1, -1), wx.DefaultSize, 0)
-        self.m_buttonPauseRec.SetBackgroundColour(wx.Colour(236, 252, 61))  # Yellow background
-
-        # Set the button's foreground color (text color)
-        self.m_buttonPauseRec.SetForegroundColour(wx.Colour(0, 0, 0))  # Black text
-        bSizerHorizontal_1.Add(self.m_buttonPauseRec, 1, 0, 5)
 
         self.m_buttonStopRec = wx.Button(self, wx.ID_ANY, u"Finalizar grabacion", wx.DefaultPosition, wx.DefaultSize, 0)
         self.m_buttonStopRec.SetBackgroundColour(wx.Colour(255, 165, 0))  # Red background
@@ -149,9 +186,8 @@ class GrabadoraGUIFrame(wx.Frame):
         # Connect Events
         self.m_textCtrlFilename.Bind(wx.EVT_KILL_FOCUS, self.onAudioNameUpdate)
         self.m_buttonBrowse.Bind(wx.EVT_BUTTON, self.on_browse)
-        self.m_buttonReInit.Bind(wx.EVT_BUTTON, self.onReInit)
+        self.m_buttonMonitor.Bind(wx.EVT_BUTTON, self.onMonitor)
         self.m_buttonStartRec.Bind(wx.EVT_BUTTON, self.onStartRec)
-        self.m_buttonPauseRec.Bind(wx.EVT_BUTTON, self.onPauseRec)
         self.m_buttonStopRec.Bind(wx.EVT_BUTTON, self.onStopRec)
         self.m_gain_slider.Bind(wx.EVT_SLIDER, self.onGainChange)
 
@@ -209,13 +245,10 @@ class GrabadoraGUIFrame(wx.Frame):
     def onAudioNameUpdate(self, event):
         event.Skip()
 
-    def onReInit(self, event):
+    def onMonitor(self, event):
         event.Skip()
 
     def onStartRec(self, event):
-        event.Skip()
-
-    def onPauseRec(self, event):
         event.Skip()
 
     def onStopRec(self, event):
