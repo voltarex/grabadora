@@ -60,6 +60,7 @@ import wx
 import logging
 import subprocess
 import pyaudio
+import threading
 from pydub import AudioSegment
 import numpy as np
 from pathlib import Path
@@ -472,25 +473,46 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
                 self.timer_running = False
 
             if self.export:
-                # Read the WAV file
-                self.logger.info("read wave")
-                sound = AudioSegment.from_wav(frame.output_filename)
+                # Show modal progress dialog
+                progress_dlg = wx.ProgressDialog(
+                    "Conversion en curso...",
+                    "Convirtiendo de formato WAV a MP3. Paciencia por favor...",
+                    maximum=100,
+                    parent=self,
+                    style=wx.PD_APP_MODAL | wx.PD_ELAPSED_TIME
+                )
 
-                # Split the filename at the last dot (.) to get the base name and extension
-                base, _ = frame.output_filename.rsplit('.', 1)
-                mp3_filename = f"{base}.mp3"
+                def export_task():
+                    try:
+                        self.logger.info("read wave")
+                        sound = AudioSegment.from_wav(frame.output_filename)
 
-                # Export the sound as MP3
-                self.logger.info(f"export wave {frame.output_filename} to {mp3_filename}")
-                sound.export(mp3_filename, format="mp3", bitrate="192k")
-                self.logger.info("delete wave")
-                os.remove(frame.output_filename)
+                        base, _ = frame.output_filename.rsplit('.', 1)
+                        mp3_filename = f"{base}.mp3"
 
+                        # Fake progress simulation
+                        for i in range(1, 101):
+                            time.sleep(0.02)  # simulate work
+                            wx.CallAfter(progress_dlg.Update, i)
 
-            self.logger.info("All closed successfully. Return to monitoring state")
+                        self.logger.info(f"export wave {frame.output_filename} to {mp3_filename}")
+                        # Export – no built-in progress, so we just simulate steps
+                        sound.export(mp3_filename, format="mp3", bitrate="192k")
+
+                        self.logger.info("delete wave")
+                        os.remove(frame.output_filename)
+
+                    finally:
+                        wx.CallAfter(progress_dlg.Destroy)
+                        self.logger.info("Closed dialog box")
+
+                # Run export in a thread so UI remains responsive
+                self.logger.info("Start conversion thread")
+                thread = threading.Thread(target=export_task, daemon=True).start()
+                self.logger.info("Conversion closed successfully. Return to monitoring state")
 
             self.logger.info("Set output filename")
-            # Create a WAV file with a unique filename based on date and time
+            # Create a new unique WAV filename based on date and time
             now = datetime.datetime.now()
             self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
             base, extension = self.output_filename.rsplit('.', 1)

@@ -57,7 +57,7 @@ import os
 import sys
 from pathlib import Path
 
-VERSION = "v2.0"
+VERSION = "v2.1"
 
 ###########################################################################
 ## Class GrabadoraGUIFrame
