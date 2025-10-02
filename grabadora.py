@@ -56,6 +56,7 @@ import time
 import wave
 import datetime
 import os
+import re
 import wx
 import logging
 import subprocess
@@ -124,6 +125,53 @@ def notify_ffmpeg_missing():
         "FFmpeg Not Found",
         wx.ICON_ERROR | wx.OK
     )
+
+
+def is_valid_windows_filename(filename):
+    """
+    Check if a filename is valid for Windows OS.
+
+    Args:
+        filename: The filename to validate (without path)
+
+    Returns:
+        tuple: (bool, str) - (is_valid, error_message)
+    """
+    # Check if empty
+    if not filename or filename.strip() == "":
+        return False, "El nombre de archivo no puede estar vacío"
+
+    # Check length (Windows has 255 char limit for filename)
+    if len(filename) > 255:
+        return False, "El nombre de archivo es demasiado largo (máximo 255 caracteres)"
+
+    # Invalid characters in Windows: < > : " / \ | ? *
+    invalid_chars = r'[<>:"/\\|?*]'
+    if re.search(invalid_chars, filename):
+        return False, "El nombre contiene caracteres inválidos: < > : \" / \\ | ? *"
+
+    # Check for reserved names in Windows
+    reserved_names = [
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    ]
+
+    # Get filename without extension
+    name_without_ext = filename.split('.')[0].upper()
+    if name_without_ext in reserved_names:
+        return False, f"'{filename}' es un nombre reservado del sistema"
+
+    # Check if ends with space or period (not allowed in Windows)
+    if filename.endswith(' ') or filename.endswith('.'):
+        return False, "El nombre no puede terminar con espacio o punto"
+
+    # Check for control characters (ASCII 0-31)
+    if any(ord(char) < 32 for char in filename):
+        return False, "El nombre contiene caracteres de control inválidos"
+
+    return True, ""
+
 
 class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
     """
@@ -379,11 +427,19 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
             if self.state_fsm == "monitoring":
                 self.logger.info("Start recording")
 
-                # lock the filename
+                # check the filename
+                # repeat until valid filename
+                self.output_filename = self.m_textCtrlFilename.GetValue()
+                is_valid_filename, error_msg = is_valid_windows_filename(self.output_filename)
+
+                if not is_valid_filename:
+                    wx.MessageBox(error_msg, "Nombre de archivo inválido", wx.OK | wx.ICON_ERROR)
+                    event.Skip()
+                    return
+
                 self.logger.info("Lock filename")
                 self.m_textCtrlFilename.SetEditable(False)
                 self.m_textCtrlFilename.Disable()
-                self.output_filename = self.m_textCtrlFilename.GetValue()
                 if not self.output_filename.endswith('.wav'):
                     self.output_filename += '.wav'
                 self.output_filename = os.path.join(self.cds_audio_path, self.output_filename)
