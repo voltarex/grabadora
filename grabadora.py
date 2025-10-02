@@ -74,9 +74,17 @@ RATE = 44100
 CHUNK = 1024
 GAIN = 2.0
 
+# Desktop path setting out of main class to initialize log file in working directory
+desktop_path = Path(os.path.join(os.environ['USERPROFILE'], 'Desktop'))
+cds_audio_path = desktop_path / "CdS Audio"
+if not cds_audio_path.exists():
+    cds_audio_path.mkdir(parents=True)
+
 # Set up logging
+log_file = os.path.join(cds_audio_path, 'grabadora.log')
+
 logging.basicConfig(
-    filename='grabadora.log',       # Log file location
+    filename=log_file,  # Log file location
     filemode='w',                   # Overwrite the log file
     level=logging.INFO,             # Log level
     format='%(asctime)s - %(levelname)s - %(name)s.%(funcName)s - %(message)s'
@@ -170,14 +178,22 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
         self.rec_elapsed = 0.0  # Total elapsed time before last pause
         self.timer_running = False
 
-        # Desktop path
-        desktop_path = Path(os.path.join(os.environ['USERPROFILE'], 'Desktop'))
-        self.cds_audio_path = desktop_path / "CdS Audio"
-        if not self.cds_audio_path.exists():
-            self.cds_audio_path.mkdir(parents=True)
-            self.logger.info(f'Directory "CdS Audio" created at: {self.cds_audio_path}')
-        else:
-            self.logger.info(f'Directory "CdS Audio" already exists at: {self.cds_audio_path}')
+        # Conversion thread
+        self.thread = None
+
+        self.cds_audio_path = cds_audio_path
+
+        self.m_textCtrlFilename.SetValue("      Iniciar monitoreo para fijar el nombre del audio!")
+
+        # Set foreground (text) color
+        self.m_textCtrlFilename.SetForegroundColour(wx.Colour(255, 0, 0))  # Red text
+
+        # Set background color
+        self.m_textCtrlFilename.SetBackgroundColour(wx.Colour(255, 255, 0))  # Yellow background
+
+        # disable ability to edit
+        self.m_textCtrlFilename.SetEditable(False)
+
 
         self.export = True
         if not check_ffmpeg_installed():
@@ -247,6 +263,9 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
                 self.logger.info("Set output filename")
                 self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
                 base, extension = self.output_filename.rsplit('.', 1)
+                self.m_textCtrlFilename.SetForegroundColour(wx.Colour(wx.BLACK))
+                self.m_textCtrlFilename.SetBackgroundColour(wx.Colour(wx.WHITE))
+
                 self.m_textCtrlFilename.SetValue(base)
                 self.m_textCtrlFilename.SetEditable(True)
 
@@ -308,8 +327,16 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
                 self.m_buttonStopRec.SetLabel("Finalizar grabacion")
                 self.m_buttonStartRec.Disable()
                 self.m_buttonStopRec.Disable()
-                self.m_textCtrlFilename.SetValue("")
-                self.m_textCtrlFilename.Disable()
+
+                self.m_textCtrlFilename.SetValue("      Iniciar monitoreo para fijar el nombre del audio!")
+
+                # Set foreground (text) color
+                self.m_textCtrlFilename.SetForegroundColour(wx.Colour(255, 0, 0))  # Red text
+
+                # Set background color
+                self.m_textCtrlFilename.SetBackgroundColour(wx.Colour(255, 255, 0))  # Yellow background
+
+                # disable ability to edit
                 self.m_textCtrlFilename.SetEditable(False)
 
                 self.state_fsm = "idle"
@@ -473,13 +500,27 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
                 self.timer_running = False
 
             if self.export:
-                # Show modal progress dialog
+                self.m_buttonMonitor.Disable()
+                self.m_buttonMonitor.Refresh()
+                self.m_buttonMonitor.Update()
+                self.m_buttonStartRec.Disable()
+                self.m_buttonStartRec.Refresh()
+                self.m_buttonStartRec.Update()
+                self.m_buttonStopRec.Disable()
+                self.m_buttonStopRec.Refresh()
+                self.m_buttonStopRec.Update()
+                self.m_textCtrlFilename.Disable()
+                self.m_textCtrlFilename.SetEditable(False)
+                self.m_textCtrlFilename.Refresh()
+                self.m_textCtrlFilename.Update()
+
+                # Show non-modal progress dialog
                 progress_dlg = wx.ProgressDialog(
                     "Conversion en curso...",
                     "Convirtiendo de formato WAV a MP3. Paciencia por favor...",
                     maximum=100,
                     parent=self,
-                    style=wx.PD_APP_MODAL | wx.PD_ELAPSED_TIME
+                    style=wx.PD_AUTO_HIDE | wx.PD_ELAPSED_TIME
                 )
 
                 def export_task():
@@ -487,31 +528,55 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
                         self.logger.info("read wave")
                         sound = AudioSegment.from_wav(frame.output_filename)
 
-                        base, _ = frame.output_filename.rsplit('.', 1)
+                        base, _ = self.output_filename.rsplit('.', 1)
                         mp3_filename = f"{base}.mp3"
 
                         # Fake progress simulation
                         for i in range(1, 101):
                             time.sleep(0.02)  # simulate work
-                            wx.CallAfter(progress_dlg.Update, i)
+                            # Check if dialog still exists
+                            if progress_dlg and not progress_dlg.IsBeingDeleted():
+                                wx.CallAfter(progress_dlg.Update, i)
 
                         self.logger.info(f"export wave {frame.output_filename} to {mp3_filename}")
                         # Export – no built-in progress, so we just simulate steps
                         sound.export(mp3_filename, format="mp3", bitrate="192k")
 
                         self.logger.info("delete wave")
-                        os.remove(frame.output_filename)
+                        os.remove(self.output_filename)
+                    except Exception as e:
+                        self.logger.error(f"Error in export thread: {e}", exc_info=True)
 
-                    finally:
-                        wx.CallAfter(progress_dlg.Destroy)
-                        self.logger.info("Closed dialog box")
+                    # finally:
+                    #    try:
+                    #        wx.CallAfter(progress_dlg.Destroy)
+                    #        self.logger.info("Closed dialog box")
+                    #    except Exception as e:
+                    #        self.logger.error(f"Error closing dialog: {e}", exc_info=True)
+
 
                 # Run export in a thread so UI remains responsive
                 self.logger.info("Start conversion thread")
-                thread = threading.Thread(target=export_task, daemon=True).start()
-                self.logger.info("Conversion closed successfully. Return to monitoring state")
+                self.thread = threading.Thread(target=export_task, daemon=False)
+                # Start the thread
+                self.thread.start()
+
+                self.logger.info("Wait for conversion thread to complete")
+                self.thread.join()
+                self.logger.info("Thread completed")
+
+                # NOW destroy the dialog on the main thread
+                try:
+                    progress_dlg.Destroy()
+                    self.logger.info("Closed dialog box")
+                except Exception as e:
+                    self.logger.error(f"Error closing dialog: {e}", exc_info=True)
+
+            else:
+                self.logger.info("Thread was not started")
 
             self.logger.info("Set output filename")
+
             # Create a new unique WAV filename based on date and time
             now = datetime.datetime.now()
             self.output_filename = f"audio_{now.strftime('%d-%m-%Y_%H-%M-%S')}.wav"
@@ -519,17 +584,26 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
             self.m_textCtrlFilename.SetValue(base)
             self.m_textCtrlFilename.SetEditable(True)
 
-            self.logger.info("Initialize buttons")
+            self.logger.info("Reinitialize buttons")
             self.m_buttonMonitor.SetLabel("Finalizar monitor")
             self.m_buttonStartRec.SetLabel("Iniciar grabacion")
             self.m_buttonStopRec.SetLabel("Finalizar grabacion")
             self.m_buttonStartRec.SetBackgroundColour(wx.Colour(63, 239, 21))
             self.m_buttonStartRec.Refresh()
+            self.m_buttonStartRec.Update()
             self.m_buttonMonitor.Enable()
+            self.m_buttonMonitor.Refresh()
+            self.m_buttonMonitor.Update()
             self.m_buttonStartRec.Enable()
+            self.m_buttonStartRec.Refresh()
+            self.m_buttonStartRec.Update()
             self.m_buttonStopRec.Disable()
+            self.m_buttonStopRec.Refresh()
+            self.m_buttonStopRec.Update()
             self.m_textCtrlFilename.Enable()
             self.m_textCtrlFilename.SetEditable(True)
+            self.m_textCtrlFilename.Refresh()
+            self.m_textCtrlFilename.Update()
             self.state_fsm = "monitoring"
 
         except OSError as e:
@@ -540,7 +614,13 @@ class GUI(GrabadoraGUIFrame.GrabadoraGUIFrame):
             logging.error(f"An unexpected error occurred: {str(e)}")
             self.state_fsm = "error"
 
-        event.Skip()
+        self.logger.info("Exiting onStopRec()")
+
+        try:
+            event.Skip()
+        except:
+            pass
+
 
     def elapsed(self):
         """
